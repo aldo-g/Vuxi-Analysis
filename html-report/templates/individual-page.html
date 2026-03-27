@@ -1,0 +1,996 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-breadcrumb">
+    <a href="overview.html" class="breadcrumb-link">← Back to Overview</a>
+</div>
+
+<div class="page-header">
+    <h1>{{ page_title }}</h1>
+    <p class="page-subtitle">Detailed analysis and strategic recommendations</p>
+</div>
+
+<!-- Key Insights & Overall Rating Side by Side -->
+<div class="insights-rating-container">
+    <div class="insights-section">
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title">Page Summary</h2>
+            </div>
+            <div class="section-content">
+                <div class="insights-content">
+                    <p class="summary-text">{{ page_analysis.summary }}</p>
+                    
+                    <!-- Page Metadata -->
+                    <div class="page-metadata">
+                        <div class="metadata-grid">
+                            <div class="metadata-item">
+                                <span class="metadata-label">Page Type:</span>
+                                <span class="metadata-value">{{ page_type }}</span>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">URL:</span>
+                                <span class="metadata-value metadata-url">{{ page_url }}</span>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Analysis Date:</span>
+                                <span class="metadata-value">{{ analysis_date }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="rating-section">
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title">Overall Rating</h2>
+            </div>
+            <div class="section-content">
+                <div class="rating-display">
+                    <div class="score-circle">
+                        <svg class="score-ring" width="120" height="120">
+                            <circle class="score-ring-background" cx="60" cy="60" r="50"></circle>
+                            <circle class="score-ring-progress" cx="60" cy="60" r="50" 
+                                    data-score="{{ page_analysis.overall_score }}"></circle>
+                        </svg>
+                        <div class="score-text">
+                            <span class="score-number">{{ page_analysis.overall_score }}</span>
+                            <span class="score-label">/ 10</span>
+                        </div>
+                    </div>
+                    <div class="score-interpretation">
+                        {% if page_analysis.overall_score >= 8 %}
+                        <div class="interpretation-title status-excellent">Excellent</div>
+                        <div class="interpretation-desc">Outstanding performance</div>
+                        {% elif page_analysis.overall_score >= 6 %}
+                        <div class="interpretation-title status-good">Good</div>
+                        <div class="interpretation-desc">Solid performance</div>
+                        {% else %}
+                        <div class="interpretation-title status-needs-work">Requires Attention</div>
+                        <div class="interpretation-desc">Significant opportunities for improvement</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Professional Tabs -->
+<!-- Professional Tabs -->
+<div class="analysis-tabs">
+    <div class="tabs">
+        <div class="tab active" data-tab="tab-detailed">
+            <span>Detailed Analysis</span>
+        </div>
+        <div class="tab" data-tab="tab-issues">
+            <span>Issues</span>
+            {% if page_analysis.key_issues and page_analysis.key_issues.length > 0 %}
+            <span class="tab-badge">{{ page_analysis.key_issues.length }}</span>
+            {% endif %}
+        </div>
+        <div class="tab" data-tab="tab-recommendations">
+            <span>Recommendations</span>
+            {% if page_analysis.recommendations and page_analysis.recommendations.length > 0 %}
+            <span class="tab-badge">{{ page_analysis.recommendations.length }}</span>
+            {% endif %}
+        </div>
+        <div class="tab" data-tab="tab-raw">
+            <span>Raw Analysis</span>
+        </div>
+        <div class="tab" data-tab="tab-screenshot">
+            <span>Screenshot</span>
+        </div>
+    </div>
+
+    <!-- Detailed Analysis Tab -->
+    <div id="tab-detailed" class="tab-content active">
+        <div class="section-content detailed-analysis-container">
+            {% if page_analysis.cleaned_analysis %}
+            <div class="detailed-analysis-content" 
+                 data-section-scores="{{ page_analysis.section_scores | tojson }}">
+                {{ page_analysis.cleaned_analysis | safe }}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-title">No Detailed Analysis Available</div>
+                <div class="empty-desc">The detailed analysis for this page could not be generated.</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Issues Tab -->
+    <div id="tab-issues" class="tab-content">
+        <div class="section-content">
+            {% if page_analysis.key_issues and page_analysis.key_issues.length > 0 %}
+            <div class="issues-grid">
+                {% for issue in page_analysis.key_issues %}
+                <div class="issue-item critical-issue">
+                    <div class="issue-number">{{ loop.index }}</div>
+                    <div class="issue-content">
+                        <div class="issue-text">{{ issue }}</div>
+                        <div class="issue-meta">
+                            <span class="issue-priority">High Priority</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="success-state">
+                <div class="success-title">No Critical Issues Identified</div>
+                <div class="success-desc">This page appears to be functioning well without major usability problems.</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recommendations Tab -->
+    <div id="tab-recommendations" class="tab-content">
+        <div class="section-content">
+            {% if page_analysis.recommendations and page_analysis.recommendations.length > 0 %}
+            <div class="recommendations-grid">
+                {% for recommendation in page_analysis.recommendations %}
+                <div class="recommendation-item recommendation">
+                    <div class="recommendation-number">{{ loop.index }}</div>
+                    <div class="recommendation-content">
+                        <div class="recommendation-text">{{ recommendation }}</div>
+                        <div class="recommendation-meta">
+                            <span class="recommendation-impact">High Impact</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-title">No Specific Recommendations</div>
+                <div class="empty-desc">No specific recommendations were provided for this page.</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Raw Analysis Tab -->
+    <div id="tab-raw" class="tab-content">
+        <div class="section-content">
+            {% if page_analysis.original_analysis %}
+            <div class="raw-analysis-container">
+                <pre class="raw-analysis-text">{{ page_analysis.original_analysis }}</pre>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-title">No Raw Analysis Data</div>
+                <div class="empty-desc">The raw analysis data is not available for this page.</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Screenshot Tab -->
+    <div id="tab-screenshot" class="tab-content">
+        <div class="section-content">
+            <div class="screenshot-tab-container">
+                <div class="screenshot-header">
+                    <h3 class="screenshot-title">Page Screenshot</h3>
+                    <p class="screenshot-desc">Visual reference of the analyzed page</p>
+                </div>
+                <div class="screenshot-container">
+                    <img src="screenshots/{{ screenshot_path }}" alt="{{ page_type }}" class="screenshot" 
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="screenshot-fallback" style="display: none;">
+                        <div class="fallback-text">Screenshot not available: {{ screenshot_path }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Page Header */
+.page-breadcrumb {
+    margin-bottom: var(--space-6);
+}
+
+.breadcrumb-link {
+    color: var(--color-gray-500);
+    text-decoration: none;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    transition: color var(--transition-fast);
+}
+
+.breadcrumb-link:hover {
+    color: var(--color-primary);
+}
+
+.page-header {
+    margin-bottom: var(--space-8);
+    text-align: center;
+    padding-bottom: var(--space-6);
+    border-bottom: 1px solid var(--color-gray-200);
+}
+
+.page-header h1 {
+    margin-bottom: var(--space-2);
+}
+
+.page-subtitle {
+    font-size: var(--font-size-lg);
+    color: var(--color-gray-600);
+    margin: 0;
+}
+
+/* Key Insights & Rating Layout */
+.insights-rating-container {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: var(--space-6);
+    margin-bottom: var(--space-10);
+}
+
+.insights-content {
+    padding: var(--space-2);
+}
+
+.summary-text {
+    font-size: var(--font-size-lg);
+    line-height: 1.7;
+    color: var(--color-gray-700);
+    margin-bottom: var(--space-6);
+}
+
+/* Page Metadata Styling */
+.page-metadata {
+    border-top: 1px solid var(--color-gray-200);
+    padding-top: var(--space-4);
+    margin-top: var(--space-4);
+}
+
+.metadata-grid {
+    display: grid;
+    gap: var(--space-3);
+}
+
+.metadata-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+}
+
+.metadata-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-500);
+    font-weight: var(--font-weight-medium);
+    min-width: 100px;
+    flex-shrink: 0;
+}
+
+.metadata-value {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-700);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.4;
+}
+
+.metadata-url {
+    word-break: break-all;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-600);
+}
+
+/* Screenshot Tab Styling */
+.screenshot-tab-container {
+    padding: var(--space-6);
+}
+
+.screenshot-header {
+    text-align: center;
+    margin-bottom: var(--space-6);
+}
+
+.screenshot-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-gray-900);
+    margin: 0 0 var(--space-2) 0;
+}
+
+.screenshot-desc {
+    color: var(--color-gray-600);
+    margin: 0;
+}
+
+.screenshot-container {
+    background: var(--color-gray-50);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    border: 1px solid var(--color-gray-200);
+}
+
+.screenshot {
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-base);
+    border: 1px solid var(--color-gray-300);
+    box-shadow: var(--shadow-base);
+}
+
+.screenshot-fallback {
+    padding: var(--space-8);
+    text-align: center;
+    color: var(--color-gray-500);
+    background: var(--color-gray-100);
+    border-radius: var(--radius-base);
+    border: 1px solid var(--color-gray-200);
+}
+
+.fallback-text {
+    font-size: var(--font-size-sm);
+    font-family: monospace;
+}
+
+/* Rating Display */
+.rating-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: var(--space-4);
+}
+
+.score-circle {
+    position: relative;
+    margin-bottom: var(--space-4);
+}
+
+.score-ring {
+    transform: rotate(-90deg);
+}
+
+.score-ring-background {
+    fill: none;
+    stroke: var(--color-gray-200);
+    stroke-width: 6;
+}
+
+.score-ring-progress {
+    fill: none;
+    stroke: var(--color-primary);
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-dasharray: 314.16;
+    stroke-dashoffset: 314.16;
+    transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.score-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+}
+
+.score-number {
+    font-size: var(--font-size-3xl);
+    font-weight: var(--font-weight-extrabold);
+    color: var(--color-gray-900);
+    line-height: 1;
+}
+
+.score-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-600);
+    font-weight: var(--font-weight-medium);
+}
+
+.score-interpretation {
+    width: 100%;
+}
+
+.interpretation-title {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    margin-bottom: var(--space-1);
+}
+
+.interpretation-desc {
+    color: var(--color-gray-600);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+}
+
+/* Professional Tabs */
+.analysis-tabs {
+    margin-bottom: var(--space-8);
+}
+
+.tabs {
+    border-bottom: 1px solid var(--color-gray-200);
+    background: var(--color-gray-50);
+}
+
+.tab {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.tab-content {
+    background: #ffffff;
+    border: 1px solid var(--color-gray-200);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+/* Detailed Analysis Content Styling */
+.detailed-analysis-container {
+    padding: var(--space-8);
+}
+
+.detailed-analysis-content {
+    font-family: var(--font-family);
+    line-height: 1.6;
+    color: var(--color-gray-700);
+    max-width: none;
+}
+
+.detailed-analysis-content h1,
+.detailed-analysis-content h2,
+.detailed-analysis-content h3,
+.detailed-analysis-content h4 {
+    color: var(--color-gray-900);
+    margin-top: var(--space-8);
+    margin-bottom: var(--space-4);
+    font-weight: var(--font-weight-semibold);
+}
+
+.detailed-analysis-content h2 {
+    font-size: var(--font-size-xl);
+    padding: var(--space-4) var(--space-6);
+    background: var(--color-primary-light);
+    border-left: 4px solid var(--color-primary);
+    border-radius: var(--radius-base);
+    margin: var(--space-8) 0 var(--space-6) 0;
+}
+
+.detailed-analysis-content h3 {
+    font-size: var(--font-size-lg);
+    color: var(--color-primary);
+    margin-top: var(--space-6);
+    margin-bottom: var(--space-3);
+}
+
+.detailed-analysis-content p {
+    margin-bottom: var(--space-4);
+    line-height: 1.6;
+}
+
+.detailed-analysis-content ul,
+.detailed-analysis-content ol {
+    margin: var(--space-4) 0;
+    padding-left: var(--space-6);
+}
+
+.detailed-analysis-content li {
+    margin-bottom: var(--space-2);
+    line-height: 1.5;
+}
+
+.detailed-analysis-content strong {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-gray-800);
+}
+
+.detailed-analysis-content .analysis-main {
+    background: var(--color-primary-light);
+    padding: var(--space-6);
+    border-radius: var(--radius-md);
+    border-left: 4px solid var(--color-primary);
+    margin: var(--space-8) 0;
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-primary-dark);
+}
+
+.detailed-analysis-content .analysis-section {
+    color: var(--color-primary);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    margin-top: var(--space-6);
+    margin-bottom: var(--space-3);
+    border-bottom: 1px solid var(--color-gray-200);
+    padding-bottom: var(--space-2);
+}
+
+.detailed-analysis-content .analysis-point {
+    margin: var(--space-3) 0;
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-gray-25);
+    border-radius: var(--radius-base);
+    border-left: 3px solid var(--color-gray-300);
+    color: var(--color-gray-700);
+}
+
+.detailed-analysis-content .evidence-section {
+    background: var(--color-gray-50);
+    padding: var(--space-4);
+    border-radius: var(--radius-base);
+    margin: var(--space-4) 0;
+    border-left: 3px solid var(--color-gray-400);
+    font-size: var(--font-size-sm);
+    border: 1px solid var(--color-gray-200);
+}
+
+.detailed-analysis-content .evidence-section strong {
+    color: var(--color-gray-800);
+    font-weight: var(--font-weight-semibold);
+}
+
+/* Professional Page Role Analysis Styling */
+/* Professional Page Role Analysis Styling - No Box */
+.detailed-analysis-content .page-role-analysis {
+    margin: 0 0 var(--space-8) 0;
+}
+
+.detailed-analysis-content .page-role-title {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-gray-800);
+    margin: 0 0 var(--space-4) 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--color-gray-200);
+    padding-bottom: var(--space-2);
+}
+
+.detailed-analysis-content .page-role-content {
+    color: var(--color-gray-700);
+    line-height: 1.6;
+    font-size: var(--font-size-base);
+}
+
+/* Section Bar Charts */
+.section-bar-container {
+    margin: var(--space-6) 0;
+    padding: var(--space-5);
+    background: #ffffff;
+    border: 1px solid var(--color-gray-200);
+    border-radius: var(--radius-md);
+}
+
+.section-bar-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: var(--space-4);
+}
+
+.section-bar-label {
+    min-width: 180px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-gray-700);
+    margin-right: var(--space-4);
+}
+
+.section-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--color-gray-200);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    margin-right: var(--space-4);
+}
+
+.section-bar-fill {
+    height: 100%;
+    border-radius: var(--radius-sm);
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.section-score-value {
+    min-width: 45px;
+    text-align: center;
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-sm);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-base);
+    border: 1px solid var(--color-gray-200);
+}
+
+.section-bar-fill.status-excellent,
+.section-score-value.status-excellent { 
+    background: var(--color-success); 
+    color: white;
+    border-color: var(--color-success);
+}
+
+.section-bar-fill.status-good,
+.section-score-value.status-good { 
+    background: var(--color-success); 
+    color: white;
+    border-color: var(--color-success);
+}
+
+.section-bar-fill.status-average,
+.section-score-value.status-average { 
+    background: var(--color-warning); 
+    color: white;
+    border-color: var(--color-warning);
+}
+
+.section-bar-fill.status-poor,
+.section-score-value.status-poor { 
+    background: #c53030; /* More professional red */
+    color: white;
+    border-color: #c53030;
+}
+
+/* Issues and Recommendations */
+.issues-grid, .recommendations-grid {
+    display: grid;
+    gap: var(--space-4);
+}
+
+.issue-item, .recommendation-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-4);
+}
+
+.issue-number, .recommendation-number {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-sm);
+    flex-shrink: 0;
+    color: white;
+}
+
+.issue-number {
+    background: #c53030; /* More professional red */
+}
+
+.recommendation-number {
+    background: var(--color-success);
+}
+
+.issue-content, .recommendation-content {
+    flex: 1;
+}
+
+.issue-text, .recommendation-text {
+    font-weight: var(--font-weight-medium);
+    color: var(--color-gray-800);
+    margin-bottom: var(--space-2);
+    line-height: 1.5;
+}
+
+.issue-meta, .recommendation-meta {
+    display: flex;
+    gap: var(--space-3);
+}
+
+.issue-priority, .recommendation-impact {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-base);
+}
+
+.issue-priority {
+    background: #fed7d7; /* Softer red background */
+    color: #c53030; /* Professional red text */
+    border: 1px solid #fc8181;
+}
+
+.recommendation-impact {
+    background: var(--color-success-light);
+    color: var(--color-success-dark);
+}
+
+/* Updated Critical Issue styling */
+.critical-issue {
+    background: #ffffff;
+    border: 1px solid #fed7d7; /* Softer red border */
+    border-left: 3px solid #c53030; /* Professional red accent */
+    border-radius: var(--radius-md);
+    padding: var(--space-5);
+    margin-bottom: var(--space-4);
+    transition: all var(--transition-fast);
+}
+
+.critical-issue:hover {
+    box-shadow: var(--shadow-sm);
+    border-left-width: 4px;
+}
+
+/* States */
+.empty-state, .success-state {
+    text-align: center;
+    padding: var(--space-12);
+}
+
+.empty-title, .success-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-gray-800);
+    margin-bottom: var(--space-2);
+}
+
+.empty-desc, .success-desc {
+    color: var(--color-gray-600);
+    max-width: 400px;
+    margin: 0 auto;
+    line-height: 1.5;
+}
+
+/* Raw Analysis */
+.raw-analysis-container {
+    background: var(--color-gray-50);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-gray-200);
+    overflow: hidden;
+}
+
+.raw-analysis-text {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background: none;
+    border: none;
+    padding: var(--space-6);
+    margin: 0;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    color: var(--color-gray-700);
+}
+
+/* Screenshot */
+.screenshot-section {
+    background: var(--color-gray-25);
+}
+
+.screenshot {
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-base);
+    border: 1px solid var(--color-gray-300);
+    box-shadow: var(--shadow-base);
+}
+
+.screenshot-fallback {
+    padding: var(--space-8);
+    text-align: center;
+    color: var(--color-gray-500);
+    background: var(--color-gray-100);
+    border-radius: var(--radius-base);
+    border: 1px solid var(--color-gray-200);
+}
+
+.fallback-text {
+    font-size: var(--font-size-sm);
+    font-family: monospace;
+}
+
+/* Responsive Design */
+@media (max-width: 968px) {
+    .insights-rating-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .rating-display {
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        gap: var(--space-6);
+    }
+    
+    .score-circle {
+        margin-bottom: 0;
+    }
+    
+    .score-interpretation {
+        text-align: left;
+        max-width: 200px;
+    }
+}
+
+@media (max-width: 768px) {
+    .rating-display {
+        flex-direction: column;
+        gap: var(--space-4);
+    }
+    
+    .score-interpretation {
+        text-align: center;
+        max-width: none;
+    }
+    
+    .section-bar-item {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-2);
+    }
+    
+    .section-bar-label {
+        min-width: auto;
+        margin-right: 0;
+        margin-bottom: var(--space-2);
+    }
+    
+    .section-bar {
+        margin-right: 0;
+        margin-bottom: var(--space-2);
+    }
+    
+    .metadata-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-1);
+    }
+    
+    .metadata-label {
+        min-width: auto;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Animate score ring
+    setTimeout(() => {
+        const scoreRing = document.querySelector('.score-ring-progress');
+        if (scoreRing) {
+            const score = parseFloat(scoreRing.getAttribute('data-score'));
+            const circumference = 2 * Math.PI * 50; // radius = 50
+            const progress = (score / 10) * circumference;
+            const offset = circumference - progress;
+            
+            scoreRing.style.strokeDashoffset = offset;
+            
+            // Professional color coding
+            if (score >= 8) {
+                scoreRing.style.stroke = 'var(--color-success)';
+            } else if (score >= 6) {
+                scoreRing.style.stroke = 'var(--color-warning)';
+            } else {
+                scoreRing.style.stroke = '#c53030'; // Professional red
+            }
+        }
+    }, 800);
+    
+    // Process detailed analysis content
+    const analysisContent = document.querySelector('.detailed-analysis-content');
+    if (analysisContent) {
+        const sectionScoresData = analysisContent.getAttribute('data-section-scores');
+        let sectionScores = {};
+        
+        try {
+            sectionScores = JSON.parse(sectionScoresData) || {};
+        } catch (e) {
+            console.log('No section scores data found');
+        }
+        
+        let html = analysisContent.innerHTML;
+        
+        // More aggressive hashtag removal at the beginning
+        html = html.replace(/^\s*#\s*/, '');  // Remove hashtag with any surrounding whitespace
+        html = html.replace(/^#/, '');        // Remove bare hashtag at start
+        html = html.trim();                   // Remove any leading/trailing whitespace
+        
+        // Style PAGE ROLE ANALYSIS section professionally
+        html = html.replace(
+            /PAGE ROLE ANALYSIS:\s*(.*?)(?=UX\/UI Analysis:|$)/s, 
+            '<div class="page-role-analysis"><div class="page-role-title">Page Role Analysis</div><div class="page-role-content">$1</div></div>'
+        );
+        
+        // Convert markdown-style formatting to professional HTML
+        // Remove score information from headings and clean them up
+        html = html.replace(/## (\d+)\. ([^(]+)(?:\(Score[^)]*\))?:?/g, '<h2>$1. $2</h2>');
+        html = html.replace(/- (EVIDENCE:.*)/g, '<div class="evidence-section"><strong>$1</strong></div>');
+        html = html.replace(/- ([^E].*)/g, '<div class="analysis-point">$1</div>');
+        html = html.replace(/# ([^#].*)/g, '<h3>$1</h3>');
+        
+        // Clean up any remaining score fragments that might be floating
+        html = html.replace(/\(Score:\s*\d+\/10\)/g, '');
+        html = html.replace(/Score:\s*\d+\/10/g, '');
+        
+        // Insert professional bar charts
+        const sectionMapping = {
+            'FIRST IMPRESSION & CLARITY': 'first_impression_clarity',
+            'GOAL ALIGNMENT': 'goal_alignment',
+            'VISUAL DESIGN': 'visual_design',
+            'CONTENT QUALITY': 'content_quality',
+            'USABILITY & ACCESSIBILITY': 'usability_accessibility',
+            'CONVERSION OPTIMIZATION': 'conversion_optimization',
+            'TECHNICAL EXECUTION': 'technical_execution',
+        };
+        
+        for (const [sectionName, scoreKey] of Object.entries(sectionMapping)) {
+            if (sectionScores[scoreKey]) {
+                const score = sectionScores[scoreKey];
+                const statusClass = score >= 8 ? 'status-excellent' : score >= 6 ? 'status-good' : score >= 4 ? 'status-average' : 'status-poor';
+                
+                const barHTML = `
+                    <div class="section-bar-container">
+                        <div class="section-bar-item">
+                            <div class="section-bar-label">${sectionName}</div>
+                            <div class="section-bar">
+                                <div class="section-bar-fill ${statusClass}" 
+                                     data-score="${score}" 
+                                     style="width: 0%;"></div>
+                            </div>
+                            <div class="section-score-value ${statusClass}">${score}/10</div>
+                        </div>
+                    </div>
+                `;
+                
+                // More precise matching to avoid duplication
+                const cleanSectionName = sectionName.trim();
+                const patterns = [
+                    new RegExp(`(<h2>[^<]*${cleanSectionName}[^<]*</h2>)`, 'i'),
+                    new RegExp(`(<h2>[^<]*${cleanSectionName.split(' ')[0]}[^<]*${cleanSectionName.split(' ')[1] || ''}[^<]*</h2>)`, 'i')
+                ];
+                
+                for (const pattern of patterns) {
+                    if (pattern.test(html)) {
+                        html = html.replace(pattern, `$1${barHTML}`);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Final cleanup - remove any remaining duplicated scores or fragments
+        html = html.replace(/(\d+\/10)\s*(\d+\/10)/g, '$1');
+        html = html.replace(/\)\s*\)/g, ')');
+        
+        analysisContent.innerHTML = html;
+        
+        // Animate section bars
+        setTimeout(() => {
+            const sectionBars = document.querySelectorAll('.section-bar-fill[data-score]');
+            sectionBars.forEach(bar => {
+                const score = parseInt(bar.getAttribute('data-score'));
+                const percentage = (score / 10) * 100;
+                bar.style.width = percentage + '%';
+            });
+        }, 1200);
+    }
+});
+</script>
+{% endblock %}
