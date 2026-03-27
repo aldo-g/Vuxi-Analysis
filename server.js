@@ -214,10 +214,13 @@ async function processAnalysis(jobId) {
       hasData: !!s.data
     })));
 
-    // IMPORTANT: Only process URLs from the screenshots array, not all files in directory
-    const urls = screenshots
-      .filter(s => s.success && s.url && s.url.startsWith('http'))
-      .map(s => s.url);
+    // IMPORTANT: Only process unique URLs from the screenshots array, not all files in directory
+    // Multiple screenshots per URL are interaction states of the same page - deduplicate
+    const urls = [...new Set(
+      screenshots
+        .filter(s => s.success && s.url && s.url.startsWith('http'))
+        .map(s => s.url)
+    )];
 
     if (urls.length === 0) {
       console.log(`⚠️ No valid screenshot URLs found, using websiteUrl as fallback`);
@@ -226,44 +229,26 @@ async function processAnalysis(jobId) {
 
     console.log(`🎯 URLs to analyze (${urls.length}):`, urls);
 
-    updateJobStatus(jobId, JOB_STATUS.LIGHTHOUSE, {
-      progress: {
-        stage: 'lighthouse',
-        percentage: 25,
-        message: `Running Lighthouse audits for ${urls.length} page${urls.length === 1 ? '' : 's'}...`
-      }
-    });
-
-    updateJobStatus(jobId, JOB_STATUS.LLM_ANALYSIS, {
-      progress: {
-        stage: 'llm_analysis',
-        percentage: 50,
-        message: `Analyzing ${urls.length} page${urls.length === 1 ? '' : 's'} with AI...`
-      }
-    });
-
-    updateJobStatus(jobId, JOB_STATUS.FORMATTING, {
-      progress: {
-        stage: 'formatting',
-        percentage: 75,
-        message: 'Formatting results...'
-      }
-    });
-
-    updateJobStatus(jobId, JOB_STATUS.REPORT_GENERATION, {
-      progress: {
-        stage: 'report_generation',
-        percentage: 90,
-        message: 'Generating reports...'
-      }
-    });
-
     // Run the actual analysis with ONLY the selected URLs
     const analysisInput = {
-      urls: urls, // This now contains ONLY the selected screenshot URLs
+      urls: urls,
       organizationName: analysisData.organizationName,
       organizationType: 'organization',
-      organizationPurpose: analysisData.sitePurpose
+      organizationPurpose: analysisData.sitePurpose,
+      captureJobId: job.captureJobId
+    };
+
+    const stageStatusMap = {
+      lighthouse: JOB_STATUS.LIGHTHOUSE,
+      llm_analysis: JOB_STATUS.LLM_ANALYSIS,
+      formatting: JOB_STATUS.FORMATTING,
+      report_generation: JOB_STATUS.REPORT_GENERATION,
+    };
+
+    const onProgress = (stage, percentage, message) => {
+      updateJobStatus(jobId, stageStatusMap[stage] || JOB_STATUS.RUNNING, {
+        progress: { stage, percentage, message }
+      });
     };
 
     console.log('🔬 Running analysis with input:', {
@@ -271,8 +256,8 @@ async function processAnalysis(jobId) {
       urls: analysisInput.urls,
       organizationName: analysisInput.organizationName
     });
-    
-    const result = await analysis(analysisInput);
+
+    const result = await analysis(analysisInput, onProgress);
 
     console.log('📋 Analysis completed:', {
       success: result.success,

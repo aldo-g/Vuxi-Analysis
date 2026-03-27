@@ -62,15 +62,50 @@ function getExampleSection() {
   `;
 }
 
-function createAnalysisPrompt(pageType, context, sections) {
+function getCaptureContext(screenshotCount) {
+  if (!screenshotCount || screenshotCount <= 1) {
+    return `
+    CAPTURE CONTEXT:
+    You are viewing a single screenshot of this page in its default loaded state.
+    Be aware that content may exist behind tabs, accordions, dropdowns, modals, or other interactive elements
+    that are not visible in this view. Do not penalise content that is intentionally hidden behind interactions —
+    focus your analysis on what is visible and the discoverability of hidden content.
+    `;
+  }
+
+  return `
+    CAPTURE CONTEXT — IMPORTANT:
+    You are viewing ${screenshotCount} screenshots of the SAME page. These represent:
+    - Image 1: The page in its default loaded state (baseline)
+    - Images 2–${screenshotCount}: The page after specific interactive elements were triggered
+      (e.g. dropdowns expanded, modals opened, tabs clicked, accordions revealed)
+
+    This is a PARTIAL view of the page's content. The capture tool systematically triggered
+    interactive elements one at a time to reveal hidden content — but there may be additional
+    content, sections, or functionality not captured in these screenshots.
+
+    When analysing:
+    - Treat all ${screenshotCount} images together as a composite picture of one page
+    - Do NOT penalise the page for content that appears in later screenshots but not the baseline —
+      this is expected behaviour for progressive disclosure patterns
+    - DO evaluate whether hidden content is sufficiently discoverable and whether the interaction
+      patterns make sense for the user's journey
+    - Note when important content appears to be hidden behind interactions that users may miss
+    - Avoid drawing conclusions about content completeness from the baseline screenshot alone
+    `;
+}
+
+function createAnalysisPrompt(pageType, context, sections, screenshotCount) {
   let prompt = `You are a UX/UI expert analyzing a ${pageType} for ${context.org_name || 'this organization'}, a ${context.org_type || 'organization'}.
-    
+
     WEBSITE PURPOSE: ${context.org_purpose || 'to achieve its business goals and serve its users effectively'}
-    
+
+    ${getCaptureContext(screenshotCount)}
+
     ${getScoringDefinitions()}
-    
+
     ${getEvaluationGuidelines(context)}
-    
+
     Provide a detailed, critical analysis focusing on how well this supports the organization's goals and serves users effectively.\n\n`;
     
     // Add each section
@@ -285,7 +320,7 @@ function getAnalysisPrompt(type, data) {
         }
       ];
 
-      let pagePrompt = createAnalysisPrompt(`${data.page_type || 'webpage'}`, context, pageSections);
+      let pagePrompt = createAnalysisPrompt(`${data.page_type || 'webpage'}`, context, pageSections, data.screenshotCount);
       
       pagePrompt += `
       URL: ${data.url}

@@ -6,7 +6,7 @@ const { validateStructuredData } = require('./utils/validator');
 
 class Formatter {
   constructor(options = {}) {
-    this.model = options.model || process.env.ANTHROPIC_MODEL || 'claude-3-7-sonnet-20250219';
+    this.model = options.model || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
     this.concurrency = options.concurrency || 4;
     this.orgContext = options.orgContext || { // Added orgContext initialization
       org_name: 'the organization',

@@ -4,7 +4,7 @@ const { Formatter } = require('./formatter');
 
 class FormattingService {
   constructor(options = {}) {
-    this.model = options.model || 'claude-3-7-sonnet-20250219';
+    this.model = options.model || 'claude-sonnet-4-5';
     this.inputPath = options.inputPath || './data/analysis/analysis.json';
     this.outputPath = options.outputPath || './data/analysis/structured-analysis.json';
     

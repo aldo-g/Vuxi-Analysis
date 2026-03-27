@@ -7,7 +7,7 @@ const { LLMAnalyzer } = require('./analyzer');
 class LLMAnalysisService {
   constructor(options = {}) {
     this.provider = options.provider || 'anthropic';
-    this.model = options.model || process.env.ANTHROPIC_MODEL || 'claude-3-7-sonnet-20250219';
+    this.model = options.model || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
     this.concurrency = options.concurrency || 3; // Add concurrency option
     this.screenshotsDir = options.screenshotsDir || './data/screenshots';
     this.lighthouseDir = options.lighthouseDir || './data/lighthouse';

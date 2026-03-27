@@ -14,7 +14,7 @@ const { getTechnicalPrompt } = require('./prompts/technical-prompt');
 class LLMAnalyzer {
   constructor(options = {}) {
     this.provider = options.provider || 'anthropic';
-    this.model = options.model || process.env.ANTHROPIC_MODEL || 'claude-3-7-sonnet-20250219';
+    this.model = options.model || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
     this.concurrency = options.concurrency || 3;
     this.screenshotsDir = options.screenshotsDir;
     this.lighthouseDir = options.lighthouseDir;
@@ -158,19 +158,35 @@ class LLMAnalyzer {
     // Use filtered data if available, otherwise load fresh data
     const screenshots = this.screenshots || await this.loadScreenshots();
     const lighthouseData = this.lighthouseData || await this.loadLighthouseData();
-    
-    console.log(`📄 Analyzing ${screenshots.length} pages concurrently (${this.concurrency} at a time)...`);
-    
-    // Prepare data for analysis
-    const analysisData = [];
-    
-    // Match screenshots with lighthouse data
+
+    console.log(`📄 Analyzing ${screenshots.length} screenshots across pages...`);
+
+    // Group screenshots by URL so all interaction states for a page are analyzed together
+    const screenshotsByUrl = new Map();
     for (const screenshot of screenshots) {
-      const matchingLighthouse = lighthouseData.find(lh => lh.url === screenshot.url);
-      
+      const url = screenshot.url;
+      if (!screenshotsByUrl.has(url)) {
+        screenshotsByUrl.set(url, []);
+      }
+      screenshotsByUrl.get(url).push(screenshot);
+    }
+
+    console.log(`📄 Grouped into ${screenshotsByUrl.size} unique page(s)`);
+
+    // Prepare data for analysis — one entry per unique URL, with all screenshots for that page
+    const analysisData = [];
+
+    for (const [url, pageScreenshots] of screenshotsByUrl) {
+      const matchingLighthouse = lighthouseData.find(lh => lh.url === url);
+
+      // Sort so baseline comes first, then interactions in order
+      pageScreenshots.sort((a, b) => a.filename.localeCompare(b.filename));
+
+      console.log(`📸 Page ${url}: ${pageScreenshots.length} screenshot(s) - ${pageScreenshots.map(s => s.filename).join(', ')}`);
+
       analysisData.push({
-        url: screenshot.url,
-        screenshot: screenshot,
+        url,
+        screenshots: pageScreenshots,
         lighthouse: matchingLighthouse ? matchingLighthouse.data : null
       });
     }
@@ -204,11 +220,11 @@ class LLMAnalyzer {
         const batchPromises = batch.map(async (data, index) => {
           const globalIndex = i + index;
           const retryCount = 1;
-          
+
           for (let attempt = 1; attempt <= retryCount; attempt++) {
             try {
-              console.log(`     📄 [${globalIndex}] Analyzing: ${data.url} (attempt ${attempt})`);
-              const pageAnalysis = await this.analyzePageWithLLM(data.screenshot, data.lighthouse, data.url);
+              console.log(`     📄 [${globalIndex}] Analyzing: ${data.url} (${data.screenshots.length} screenshot(s), attempt ${attempt})`);
+              const pageAnalysis = await this.analyzePageWithLLM(data.screenshots, data.lighthouse, data.url);
               console.log(`     ✅ [${globalIndex}] Completed: ${data.url}`);
               return pageAnalysis;
             } catch (error) {
@@ -265,95 +281,92 @@ class LLMAnalyzer {
     }
   }
   
-  async analyzePageWithLLM(screenshot, lighthouseData, url) {
-    console.log(`🧠 Calling LLM for page analysis for ${url}...`);
-    
-    // Prepare the prompt with orgContext
+  async analyzePageWithLLM(screenshots, lighthouseData, url) {
+    // screenshots is now an array — one entry per interaction state captured for this page
+    console.log(`🧠 Calling LLM for page analysis: ${url} (${screenshots.length} image(s))`);
+
     const prompt = getAnalysisPrompt('page', {
-      url: url,
+      url,
       lighthouse: lighthouseData,
-      context: this.orgContext
+      context: this.orgContext,
+      screenshotCount: screenshots.length,
     });
-    
+
     if (this.provider === 'anthropic') {
       try {
+        // Build the content array: text prompt followed by one image block per screenshot
+        const contentBlocks = [{ type: 'text', text: prompt }];
+
+        screenshots.forEach((screenshot, i) => {
+          const label = screenshots.length > 1
+            ? (i === 0 ? 'Baseline (page default state)' : `Interaction ${i}: ${screenshot.filename.replace(/^.*_\d{2}_interaction_\d+_/, '').replace(/_/g, ' ').replace('.png', '')}`)
+            : 'Page screenshot';
+
+          contentBlocks.push({ type: 'text', text: `\n[Image ${i + 1} of ${screenshots.length}: ${label}]` });
+          contentBlocks.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: screenshot.imageData.mediaType,
+              data: screenshot.imageData.data
+            }
+          });
+        });
+
         const response = await this.client.messages.create({
           model: this.model,
           max_tokens: 4000,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: prompt
-                },
-                {
-                  type: 'image',
-                  source: {
-                    type: 'base64',
-                    media_type: screenshot.imageData.mediaType,
-                    data: screenshot.imageData.data
-                  }
-                }
-              ]
-            }
-          ]
+          messages: [{ role: 'user', content: contentBlocks }]
         });
-        
-        const analysisText = response.content[0].text;
-        
+
         return {
-          url: url,
-          analysis: analysisText,
-          screenshot: screenshot.filename,
+          url,
+          analysis: response.content[0].text,
+          screenshots: screenshots.map(s => s.filename),
+          screenshotCount: screenshots.length,
           lighthouse: lighthouseData ? 'included' : 'not_available',
           timestamp: new Date().toISOString(),
           provider: this.provider,
           model: this.model
         };
-        
+
       } catch (error) {
         console.error(`Error analyzing page ${url}:`, error);
         throw error;
       }
     } else if (this.provider === 'openai') {
-      // OpenAI implementation
       try {
+        const contentBlocks = [{ type: 'text', text: prompt }];
+
+        screenshots.forEach((screenshot, i) => {
+          const label = screenshots.length > 1
+            ? (i === 0 ? 'Baseline (page default state)' : `Interaction ${i}`)
+            : 'Page screenshot';
+
+          contentBlocks.push({ type: 'text', text: `\n[Image ${i + 1} of ${screenshots.length}: ${label}]` });
+          contentBlocks.push({
+            type: 'image_url',
+            image_url: { url: `data:${screenshot.imageData.mediaType};base64,${screenshot.imageData.data}` }
+          });
+        });
+
         const response = await this.client.chat.completions.create({
           model: this.model,
           max_tokens: 4000,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: prompt
-                },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:${screenshot.imageData.mediaType};base64,${screenshot.imageData.data}`
-                  }
-                }
-              ]
-            }
-          ]
+          messages: [{ role: 'user', content: contentBlocks }]
         });
-        
-        const analysisText = response.choices[0].message.content;
-        
+
         return {
-          url: url,
-          analysis: analysisText,
-          screenshot: screenshot.filename,
+          url,
+          analysis: response.choices[0].message.content,
+          screenshots: screenshots.map(s => s.filename),
+          screenshotCount: screenshots.length,
           lighthouse: lighthouseData ? 'included' : 'not_available',
           timestamp: new Date().toISOString(),
           provider: this.provider,
           model: this.model
         };
-        
+
       } catch (error) {
         console.error(`Error analyzing page ${url}:`, error);
         throw error;
@@ -437,26 +450,46 @@ Please provide a comprehensive overview that synthesizes all findings into key i
   }
   
   extractUrlFromFilename(filename) {
-    // Extract URL from filename like "000_domain.com_path.png"
+    // Handles two filename formats produced by the capture service:
+    //
+    // Legacy (simple):      "001_domain.com_path.png"
+    // Enhanced (interactive): "001_domain.com_page_00_00_baseline.png"
+    //                          "001_domain.com_page_01_interaction_1_label.png"
+    //
+    // The strategy: strip the leading numeric prefix, extract the domain (first segment
+    // containing a '.'), then take only the path segment immediately after the domain
+    // (which is the page slug — "index" means root "/").
+    // Everything after the page slug is screenshot/interaction metadata and is discarded.
+
     const nameWithoutExtension = filename.replace(/\.(png|jpg|jpeg)$/, '');
     const parts = nameWithoutExtension.split('_');
-    
-    if (parts.length >= 2) {
-      // Remove the numeric prefix
-      const urlParts = parts.slice(1);
-      const domain = urlParts[0];
-      const pathParts = urlParts.slice(1);
-      
-      // Reconstruct URL
-      let url = `https://${domain}`;
-      if (pathParts.length > 0 && pathParts[0] !== 'index') {
-        url += '/' + pathParts.join('/');
-      }
-      
-      return url;
+
+    if (parts.length < 2) return null;
+
+    // Remove leading numeric prefix (e.g. "001")
+    const withoutPrefix = parts[0].match(/^\d+$/) ? parts.slice(1) : parts;
+
+    // Find the domain segment (contains a '.')
+    const domainIndex = withoutPrefix.findIndex(p => p.includes('.'));
+    if (domainIndex === -1) return null;
+
+    const domain = withoutPrefix[domainIndex];
+    const afterDomain = withoutPrefix.slice(domainIndex + 1);
+
+    // The page path slug is the very next segment (if any), but only if it looks like
+    // a path name rather than a number or known interaction keyword.
+    // Numeric-only or screenshot-metadata segments signal we've reached the suffix.
+    const metadataKeywords = /^(\d+|interaction|baseline|final|hover|click|expand|experi|create|filter|writing|next)$/i;
+    const pageSegment = afterDomain.length > 0 && !metadataKeywords.test(afterDomain[0])
+      ? afterDomain[0]
+      : null;
+
+    let url = `https://${domain}`;
+    if (pageSegment && pageSegment !== 'index') {
+      url += `/${pageSegment}`;
     }
-    
-    return null;
+
+    return url;
   }
 }
 
