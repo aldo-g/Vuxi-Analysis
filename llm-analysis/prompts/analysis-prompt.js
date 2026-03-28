@@ -215,7 +215,7 @@ function getAnalysisPrompt(type, data) {
            - (Only include if technical issues significantly impact user experience or organizational goals)
            - ...
 
-      ## ORGANIZATIONAL ALIGNMENT ASSESSMENT
+      ## OVERALL THEME ASSESSMENT
          ### How effectively the website supports: ${context.org_purpose}
            - (Your assessment focused on content, messaging, and user journey effectiveness)
          ### Content gaps preventing goal achievement

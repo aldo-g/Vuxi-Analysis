@@ -3,6 +3,8 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs-extra');
+const https = require('https');
+const http = require('http');
 
 // Load environment variables from root .env file
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
@@ -186,6 +188,24 @@ app.get('/api/jobs', (req, res) => {
   res.json(jobList);
 });
 
+// Download a remote image URL to a local file path
+function downloadFile(url, destPath) {
+  return new Promise((resolve, reject) => {
+    const proto = url.startsWith('https') ? https : http;
+    const file = require('fs').createWriteStream(destPath);
+    proto.get(url, (res) => {
+      if (res.statusCode !== 200) {
+        file.close();
+        fs.remove(destPath).catch(() => {});
+        return reject(new Error(`Failed to download ${url}: HTTP ${res.statusCode}`));
+      }
+      res.pipe(file);
+      file.on('finish', () => file.close(resolve));
+      file.on('error', (err) => { fs.remove(destPath).catch(() => {}); reject(err); });
+    }).on('error', (err) => { fs.remove(destPath).catch(() => {}); reject(err); });
+  });
+}
+
 // Main analysis processing function
 async function processAnalysis(jobId) {
   const job = analysisJobs.get(jobId);
@@ -208,14 +228,37 @@ async function processAnalysis(jobId) {
     const screenshots = analysisData.screenshots || [];
     
     console.log(`📸 Screenshots received: ${screenshots.length}`);
-    console.log(`📸 Screenshot details:`, screenshots.map(s => ({
+    console.log(`📸 Screenshot details:`, JSON.stringify(screenshots.map(s => ({
       url: s.url,
       success: s.success,
-      hasData: !!s.data
-    })));
+      isCustom: s.data?.isCustom,
+      hasStorageUrl: !!s.data?.storageUrl,
+      storageUrl: s.data?.storageUrl?.substring(0, 80),
+      filename: s.data?.filename,
+      path: s.data?.path,
+    })), null, 2));
 
     // IMPORTANT: Only process unique URLs from the screenshots array, not all files in directory
-    // Multiple screenshots per URL are interaction states of the same page - deduplicate
+    // Multiple screenshots per URL are interaction states of the same page - deduplicate.
+    // Custom uploaded screenshots may have a non-HTTP url (page name / "Custom Screenshot") —
+    // for those we synthesise a URL under the main websiteUrl so they're still included.
+    const baseOrigin = (() => {
+      try { return new URL(analysisData.websiteUrl).origin; } catch { return analysisData.websiteUrl; }
+    })();
+
+    // First pass: patch any custom screenshots that lack a proper HTTP url
+    for (const s of screenshots) {
+      if (!s.success) continue;
+      if (!s.url || !s.url.startsWith('http')) {
+        if (s.data?.storageUrl && s.data.storageUrl.startsWith('http')) {
+          const slug = (s.data?.customPageName || s.url || 'custom-page')
+            .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          s.url = `${baseOrigin}/__custom/${slug}`;
+        }
+      }
+    }
+
+    // Second pass: collect unique HTTP urls
     const urls = [...new Set(
       screenshots
         .filter(s => s.success && s.url && s.url.startsWith('http'))
@@ -228,6 +271,73 @@ async function processAnalysis(jobId) {
     }
 
     console.log(`🎯 URLs to analyze (${urls.length}):`, urls);
+
+    // Download any remote screenshots (e.g. Supabase uploads) into the local job desktop dir
+    // so the LLM analysis service can find them by scanning the filesystem.
+    // We name the file using buildFilename(url, index) so extractUrlFromFilename can
+    // reconstruct the correct page URL for grouping/filtering.
+    const captureDataDir = path.resolve(__dirname, '../vuxi-capture/data');
+    const jobDesktopDir = path.join(captureDataDir, `job_${job.captureJobId}`, 'desktop');
+    await fs.ensureDir(jobDesktopDir);
+
+    // Count existing files so custom screenshots get a unique index beyond them
+    let existingCount = 0;
+    try {
+      const existing = await fs.readdir(jobDesktopDir);
+      existingCount = existing.filter(f => /\.(png|jpg|jpeg)$/i.test(f)).length;
+    } catch (_) {}
+
+    let customIndex = existingCount + 1;
+
+    for (const screenshot of screenshots) {
+      const storageUrl = screenshot.data?.storageUrl;
+      if (!storageUrl || !storageUrl.startsWith('http')) continue;
+
+      // Build a filename that encodes the page URL so extractUrlFromFilename works
+      const pageUrl = screenshot.url;
+      let localFilename;
+      try {
+        const urlObj = new URL(pageUrl);
+        const host = urlObj.hostname.replace(/^www\./, '');
+        const pathPart = urlObj.pathname.split('/').filter(Boolean).slice(0, 3).join('-')
+          .replace(/[^a-z0-9-]/gi, '-');
+        const safeHost = host.replace(/[^a-z0-9.-]/gi, '-');
+        const remoteExt = path.extname(storageUrl.split('?')[0]) || '.png';
+        localFilename = `${String(customIndex).padStart(3, '0')}_${safeHost}${pathPart ? `_${pathPart}` : ''}${remoteExt}`;
+      } catch (_) {
+        localFilename = `${String(customIndex).padStart(3, '0')}_custom${path.extname(storageUrl.split('?')[0]) || '.png'}`;
+      }
+
+      const destPath = path.join(jobDesktopDir, localFilename);
+
+      if (await fs.pathExists(destPath)) {
+        console.log(`⏭️  Remote screenshot already cached: ${localFilename}`);
+      } else {
+        try {
+          console.log(`⬇️  Downloading remote screenshot for ${pageUrl}: ${storageUrl}`);
+          await downloadFile(storageUrl, destPath);
+          console.log(`✅  Saved to: ${destPath}`);
+        } catch (err) {
+          console.warn(`⚠️  Could not download remote screenshot: ${err.message}`);
+          customIndex++;
+          continue;
+        }
+      }
+
+      // Patch the screenshot object so filenameMatches / URL deduplication works
+      if (!screenshot.data) screenshot.data = {};
+      screenshot.data.filename = localFilename;
+      screenshot.data.path = `desktop/${localFilename}`;
+
+      // Write a sidecar URL map so the analyzer can load the correct page URL
+      const urlMapPath = path.join(jobDesktopDir, 'url-map.json');
+      let urlMap = {};
+      try { urlMap = await fs.readJson(urlMapPath); } catch (_) {}
+      urlMap[localFilename] = screenshot.url;
+      await fs.writeJson(urlMapPath, urlMap).catch(() => {});
+
+      customIndex++;
+    }
 
     // Run the actual analysis with ONLY the selected URLs
     const analysisInput = {

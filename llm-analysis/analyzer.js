@@ -80,34 +80,43 @@ class LLMAnalyzer {
     try {
       // Use screenshotsDir directly - it should already point to the desktop folder
       console.log(`📸 Loading screenshots from: ${this.screenshotsDir}`);
-      
+
       // Check if the path exists
       if (!await fs.pathExists(this.screenshotsDir)) {
         console.error(`Screenshots directory does not exist: ${this.screenshotsDir}`);
         return [];
       }
-      
+
+      // Load sidecar URL map written by the analysis server for custom/uploaded screenshots
+      let urlMap = {};
+      try {
+        urlMap = await fs.readJson(path.join(this.screenshotsDir, 'url-map.json'));
+        console.log(`📍 Loaded URL map with ${Object.keys(urlMap).length} entr(ies)`);
+      } catch (_) {}
+
       const files = await fs.readdir(this.screenshotsDir);
       const screenshots = [];
-      
+
       for (const file of files) {
-        if (file.endsWith('.png')) {
-          const filePath = path.join(this.screenshotsDir, file);
-          console.log(`📸 Processing screenshot: ${file}`);
-          const imageData = await prepareImageForLLM(filePath);
-          
-          screenshots.push({
-            filename: file,
-            path: filePath,
-            imageData: imageData,
-            url: this.extractUrlFromFilename(file)
-          });
-        }
+        if (!/\.(png|jpg|jpeg)$/i.test(file)) continue;
+        const filePath = path.join(this.screenshotsDir, file);
+        console.log(`📸 Processing screenshot: ${file}`);
+        const imageData = await prepareImageForLLM(filePath);
+
+        // Use URL map first, fall back to filename-based extraction
+        const url = urlMap[file] || this.extractUrlFromFilename(file);
+
+        screenshots.push({
+          filename: file,
+          path: filePath,
+          imageData: imageData,
+          url
+        });
       }
-      
+
       // Sort by filename to ensure consistent order
       screenshots.sort((a, b) => a.filename.localeCompare(b.filename));
-      
+
       return screenshots;
     } catch (error) {
       console.error('Error loading screenshots:', error);
@@ -407,7 +416,7 @@ class LLMAnalyzer {
   }
   
   async generateOverview(pageAnalyses, technicalSummary) {
-    const prompt = `Based on the following page analyses and technical summary, provide a high-level overview of the website for ${this.orgContext.org_name}:
+    const prompt = `Based on the following page analyses and technical summary, provide a comprehensive overview of the website for ${this.orgContext.org_name}.
 
 TECHNICAL SUMMARY:
 ${technicalSummary}
@@ -418,7 +427,31 @@ PAGE ${i + 1}: ${analysis.url}
 ${analysis.analysis}
 `).join('\n')}
 
-Please provide a comprehensive overview that synthesizes all findings into key insights and actionable recommendations for ${this.orgContext.org_name} ${this.orgContext.org_purpose}.`;
+You MUST structure your response using EXACTLY these section headers (in this order). Do not add any text before the first section header.
+
+## KEY FINDINGS
+Synthesize the most important observations across all pages. Include:
+### Goal Achievement Assessment
+How well does the site achieve its primary purpose for ${this.orgContext.org_purpose}?
+### Key Strengths
+What does the site do well?
+### Critical Weaknesses
+What are the most significant problems?
+
+## STRATEGIC RECOMMENDATIONS
+Provide prioritized, actionable recommendations. Group by priority (High/Medium/Low).
+
+## OVERALL THEME ASSESSMENT
+Evaluate the visual design, branding consistency, user experience patterns, and overall aesthetic quality across the site.
+
+## IMPLEMENTATION ROADMAP
+Provide a phased plan for improvements:
+### Phase 1 - Quick Wins
+Changes that can be made immediately with high impact.
+### Phase 2 - Core Improvements
+Medium-term changes requiring more effort.
+### Phase 3 - Long-term Enhancements
+Strategic improvements for future consideration.`;
 
     if (this.provider === 'anthropic') {
       const response = await this.client.messages.create({

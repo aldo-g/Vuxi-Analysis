@@ -53,7 +53,7 @@ class ReportGenerator {
         id: pageId,
         detailed_analysis: this.cleanAnalysisContent(page.original_analysis || ''), 
         raw_analysis: page.original_analysis || 'No raw analysis data.',
-        screenshot_path: screenshotFilename ? `temp_screenshots/${screenshotFilename}` : null
+        screenshot_path: screenshotFilename ? `assets/screenshots/${screenshotFilename}` : null
       };
     });
 
