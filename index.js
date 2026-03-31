@@ -7,7 +7,7 @@ const { FormattingService } = require('./formatting');
 const { HTMLReportService } = require('./html-report');
 
 async function analysis(data, onProgress) {
-  const { urls, organizationName, organizationType, organizationPurpose, captureJobId } = data;
+  const { urls, organizationName, organizationType, organizationPurpose, targetAudience, primaryGoal, industry, captureJobId } = data;
   const notify = onProgress || (() => {});
 
   console.log(`🔬 Starting analysis for: ${organizationName}`);
@@ -50,6 +50,9 @@ async function analysis(data, onProgress) {
     org_name: organizationName,
     org_type: organizationType || 'organization',
     org_purpose: organizationPurpose,
+    target_audience: targetAudience || '',
+    primary_goal: primaryGoal || '',
+    industry: industry || '',
     specificUrls: urls
   });
   const llmResult = await llmService.analyze();

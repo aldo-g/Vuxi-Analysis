@@ -20,7 +20,10 @@ class LLMAnalysisService {
     this.orgContext = {
       org_name: options.org_name || process.env.ORG_NAME || 'the organization',
       org_type: options.org_type || process.env.ORG_TYPE || 'organization',
-      org_purpose: options.org_purpose || process.env.ORG_PURPOSE || 'to achieve its business goals and serve its users effectively'
+      org_purpose: options.org_purpose || process.env.ORG_PURPOSE || 'to achieve its business goals and serve its users effectively',
+      target_audience: options.target_audience || '',
+      primary_goal: options.primary_goal || '',
+      industry: options.industry || '',
     };
   }
 

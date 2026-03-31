@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const https = require('https');
 const http = require('http');
+const { createClient } = require('@supabase/supabase-js');
 
 // Load environment variables from root .env file
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
@@ -19,8 +20,53 @@ const { analysis } = require('./index');
 app.use(cors());
 app.use(express.json());
 
-// In-memory job storage (in production, use Redis or database)
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// In-memory cache — populated from DB on read, keeps running jobs in sync
 const analysisJobs = new Map();
+
+// Persist an analysis job to the database (upsert)
+async function persistJob(job) {
+  const { error } = await supabase
+    .from('AnalysisJob')
+    .upsert({
+      id: job.id,
+      captureJobId: job.captureJobId,
+      status: job.status,
+      progress: job.progress || null,
+      analysisData: job.analysisData || null,
+      results: job.results || null,
+      error: job.error || null,
+      updatedAt: new Date().toISOString(),
+    }, { onConflict: 'id' });
+  if (error) console.error(`DB persist error for analysis job ${job.id.slice(0, 8)}:`, error.message);
+}
+
+// Load an analysis job from the database into the in-memory cache
+async function loadJob(jobId) {
+  const { data, error } = await supabase
+    .from('AnalysisJob')
+    .select('*')
+    .eq('id', jobId)
+    .single();
+  if (error || !data) return null;
+  const job = {
+    id: data.id,
+    captureJobId: data.captureJobId,
+    status: data.status,
+    progress: data.progress,
+    analysisData: data.analysisData,
+    results: data.results,
+    error: data.error,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+  };
+  analysisJobs.set(jobId, job);
+  return job;
+}
 
 // Job statuses
 const JOB_STATUS = {
@@ -34,7 +80,7 @@ const JOB_STATUS = {
   FAILED: 'failed'
 };
 
-// Helper function to update job status
+// Helper function to update job status (in-memory + DB)
 function updateJobStatus(jobId, status, data = {}) {
   const job = analysisJobs.get(jobId);
   if (job) {
@@ -42,6 +88,7 @@ function updateJobStatus(jobId, status, data = {}) {
     job.updatedAt = new Date().toISOString();
     Object.assign(job, data);
     console.log(`📊 Analysis Job ${jobId.slice(0,8)}: ${status} - ${data.progress?.message || ''}`);
+    persistJob(job);
   }
 }
 
@@ -117,6 +164,7 @@ app.post('/api/analysis', async (req, res) => {
     };
 
     analysisJobs.set(jobId, job);
+    await persistJob(job);
 
     console.log(`🚀 Starting analysis job ${jobId.slice(0,8)} for ${analysisData.organizationName}`);
     console.log(`📊 Screenshots to analyze: ${analysisData.screenshots?.length || 0}`);
@@ -148,9 +196,9 @@ app.post('/api/analysis', async (req, res) => {
 });
 
 // Get analysis status
-app.get('/api/analysis/:jobId', (req, res) => {
+app.get('/api/analysis/:jobId', async (req, res) => {
   const { jobId } = req.params;
-  const job = analysisJobs.get(jobId);
+  const job = analysisJobs.get(jobId) || await loadJob(jobId);
 
   if (!job) {
     return res.status(404).json({ error: 'Job not found' });
@@ -345,6 +393,9 @@ async function processAnalysis(jobId) {
       organizationName: analysisData.organizationName,
       organizationType: 'organization',
       organizationPurpose: analysisData.sitePurpose,
+      targetAudience: analysisData.targetAudience || '',
+      primaryGoal: analysisData.primaryGoal || '',
+      industry: analysisData.industry || '',
       captureJobId: job.captureJobId
     };
 

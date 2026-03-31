@@ -68,6 +68,9 @@ class ReportGenerator {
       page_analyses: processedPageAnalyses,
       metadata: {
         organization_name: analysisData.metadata.organization_name,
+        target_audience: analysisData.orgContext?.target_audience || analysisData.metadata.target_audience || '',
+        primary_goal: analysisData.orgContext?.primary_goal || analysisData.metadata.primary_goal || '',
+        industry: analysisData.orgContext?.industry || analysisData.metadata.industry || '',
         generated_at: new Date().toISOString(),
         total_pages: processedPageAnalyses.length
       },

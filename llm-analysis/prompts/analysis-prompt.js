@@ -15,12 +15,28 @@ function getScoringDefinitions() {
   `;
 }
 
+function getOrgContextBlock(orgContext) {
+  const lines = [
+    `Organization: ${orgContext.org_name}`,
+    `Industry: ${orgContext.industry || 'unspecified'}`,
+    `Primary goal: ${orgContext.primary_goal || orgContext.org_purpose}`,
+    `Target audience: ${orgContext.target_audience || 'unspecified'}`,
+  ];
+  if (orgContext.org_purpose) {
+    lines.push(`Additional context: ${orgContext.org_purpose}`);
+  }
+  return lines.join('\n    ');
+}
+
 function getEvaluationGuidelines(orgContext) {
   return `
     CRITICAL EVALUATION GUIDELINES:
-    
-    ORGANIZATIONAL CONTEXT: This is a ${orgContext.org_type} whose website aims ${orgContext.org_purpose}
-    
+
+    ORGANIZATIONAL CONTEXT:
+    ${getOrgContextBlock(orgContext)}
+
+    AUDIENCE LENS: When evaluating every section, ask — would ${orgContext.target_audience || 'the target audience'} immediately understand and trust this page? Would it motivate them to take the next step?
+
     RED FLAGS TO ALWAYS IDENTIFY:
     - Placeholder text (Lorem ipsum, "Coming soon", "Under construction")
     - Outdated information (old dates, expired events, obsolete pricing)
@@ -96,9 +112,13 @@ function getCaptureContext(screenshotCount) {
 }
 
 function createAnalysisPrompt(pageType, context, sections, screenshotCount) {
-  let prompt = `You are a UX/UI expert analyzing a ${pageType} for ${context.org_name || 'this organization'}, a ${context.org_type || 'organization'}.
+  let prompt = `You are a UX/UI expert analyzing a ${pageType} for ${context.org_name || 'this organization'}.
 
-    WEBSITE PURPOSE: ${context.org_purpose || 'to achieve its business goals and serve its users effectively'}
+    ORGANIZATION CONTEXT:
+    - Industry: ${context.industry || 'unspecified'}
+    - Primary goal: ${context.primary_goal || context.org_purpose || 'achieve its business goals'}
+    - Target audience: ${context.target_audience || 'unspecified'}
+    ${context.org_purpose ? `- Additional context: ${context.org_purpose}` : ''}
 
     ${getCaptureContext(screenshotCount)}
 
@@ -144,14 +164,21 @@ function getAnalysisPrompt(type, data) {
   const context = {
     org_name: data.context?.org_name || 'the organization',
     org_type: data.context?.org_type || 'organization',
-    org_purpose: data.context?.org_purpose || 'to achieve its business goals and serve its users effectively'
+    org_purpose: data.context?.org_purpose || 'to achieve its business goals and serve its users effectively',
+    target_audience: data.context?.target_audience || '',
+    primary_goal: data.context?.primary_goal || '',
+    industry: data.context?.industry || '',
   };
 
   switch (type) {
     case 'comprehensive_overview':
-      return `You are a senior UX/UI consultant providing a comprehensive final analysis of ${context.org_name}, a ${context.org_type}.
+      return `You are a senior UX/UI consultant providing a comprehensive final analysis of ${context.org_name}.
 
-      WEBSITE PURPOSE: ${context.org_purpose}
+      ORGANIZATION CONTEXT:
+      - Industry: ${context.industry || 'unspecified'}
+      - Primary goal: ${context.primary_goal || context.org_purpose}
+      - Target audience: ${context.target_audience || 'unspecified'}
+      ${context.org_purpose ? `- Additional context: ${context.org_purpose}` : ''}
 
       ${getEvaluationGuidelines(context)}
 
@@ -256,7 +283,7 @@ function getAnalysisPrompt(type, data) {
           number: 2,
           name: "GOAL ALIGNMENT & CONTENT RELEVANCE",
           questions: [
-            `How effectively does this page's content advance the organization's purpose: ${context.org_purpose}?`,
+            `How effectively does this page's content advance the organization's primary goal (${context.primary_goal || context.org_purpose}) for its target audience (${context.target_audience || 'unspecified'})?`,
             "Is all content directly relevant to this page's role in the user journey?",
             "Does the information provided enable users to make informed decisions or take meaningful action?",
             "Are there clear, logical next steps that align with organizational goals?",
@@ -329,7 +356,7 @@ function getAnalysisPrompt(type, data) {
       ${data.lighthouse ? formatLighthouseMetrics(data.lighthouse) : 'No lighthouse data available'}
       
       PAGE ROLE ANALYSIS:
-      - Considering this is a ${data.page_type || 'webpage'}, how completely does it fulfill its specific purpose in advancing ${context.org_purpose}?
+      - Considering this is a ${data.page_type || 'webpage'}, how completely does it fulfill its specific purpose in converting ${context.target_audience || 'visitors'} toward the goal: ${context.primary_goal || context.org_purpose}?
       - What essential information or functionality is missing that users would expect on this type of page?
       - How effectively does this page connect users to logical next steps in their journey?
       - Does the content demonstrate value and build trust appropriate for this stage of user engagement?

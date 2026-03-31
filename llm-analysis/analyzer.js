@@ -104,7 +104,15 @@ class LLMAnalyzer {
         const imageData = await prepareImageForLLM(filePath);
 
         // Use URL map first, fall back to filename-based extraction
-        const url = urlMap[file] || this.extractUrlFromFilename(file);
+        // Normalize URL: strip trailing slash from root paths so that
+        // https://example.com/ and https://example.com group into the same page.
+        const rawUrl = urlMap[file] || this.extractUrlFromFilename(file);
+        let url = rawUrl;
+        try {
+          const u = new URL(rawUrl);
+          if (u.pathname === '/') u.pathname = '';
+          url = u.href.replace(/\/$/, '') || rawUrl;
+        } catch (_) {}
 
         screenshots.push({
           filename: file,
