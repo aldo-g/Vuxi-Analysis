@@ -112,7 +112,8 @@ function getCaptureContext(screenshotCount) {
 }
 
 function createAnalysisPrompt(pageType, context, sections, screenshotCount) {
-  let prompt = `You are a UX/UI expert analyzing a ${pageType} for ${context.org_name || 'this organization'}.
+  const today = new Date().toISOString().split('T')[0];
+  let prompt = `Today's date is ${today}. You are a UX/UI expert analyzing a ${pageType} for ${context.org_name || 'this organization'}.
 
     ORGANIZATION CONTEXT:
     - Industry: ${context.industry || 'unspecified'}

@@ -1,4 +1,4 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+require('dotenv').config();
 
 const path = require('path');
 const { LighthouseService } = require('./lighthouse');
@@ -19,12 +19,12 @@ async function analysis(data, onProgress) {
     return { success: false, error: 'ANTHROPIC_API_KEY not configured' };
   }
 
-  // Screenshots live in the capture service's job directory
-  const captureDataDir = path.resolve(__dirname, '../vuxi-capture/data');
-  const jobDir = path.join(captureDataDir, `job_${captureJobId}`);
-  const screenshotsDir = path.join(jobDir, 'desktop');
+  // Screenshots live in this service's own data directory (merged service)
+  // Accept an explicit screenshotsDir override, or derive from captureJobId
+  const screenshotsDir = data.screenshotsDir ||
+    path.join(__dirname, 'data', `job_${captureJobId}`, 'desktop');
 
-  // Analysis outputs go in the analysis service's own data directory
+  // Analysis outputs
   const analysisDataDir = path.resolve(__dirname, 'data');
 
   console.log(`📸 Screenshots dir: ${screenshotsDir}`);
