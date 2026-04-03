@@ -529,12 +529,14 @@ app.post('/api/analysis', async (req, res) => {
       return res.json({ success: true, jobId: captureJobId, status: captureJob.status });
     }
 
-    // No existing capture job — create a fresh job and run full pipeline
+    // No existing capture job — if screenshots were provided, skip capture and go straight to analysis
     const jobId = uuidv4();
+    const hasScreenshots = Array.isArray(analysisData.screenshots) && analysisData.screenshots.length > 0;
     const job = {
       id: jobId,
       status: JOB_STATUS.PENDING,
       analysisData: { ...analysisData, captureJobId },
+      ...(hasScreenshots && { captureResults: { screenshots: analysisData.screenshots } }),
       progress: { stage: 'initializing', percentage: 0, message: 'Starting analysis...' },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -544,16 +546,30 @@ app.post('/api/analysis', async (req, res) => {
     await persistJob(job);
 
     setImmediate(() => {
-      updateJobStatus(jobId, JOB_STATUS.RUNNING, {
-        progress: { stage: 'starting', percentage: 5, message: 'Starting analysis...' },
-      });
-      processJob(jobId).catch(err => {
-        console.error(`❌ Job ${jobId.slice(0, 8)} failed:`, err.message);
-        updateJobStatus(jobId, JOB_STATUS.FAILED, {
-          error: err.message,
-          progress: { stage: 'failed', percentage: 0, message: `Analysis failed: ${err.message}` },
+      if (hasScreenshots) {
+        // Screenshots already provided — skip capture, run analysis directly
+        updateJobStatus(jobId, JOB_STATUS.RUNNING, {
+          progress: { stage: 'starting', percentage: 50, message: 'Starting analysis on provided screenshots...' },
         });
-      });
+        runAnalysisPhase(jobId).catch(err => {
+          console.error(`❌ Analysis phase ${jobId.slice(0, 8)} failed:`, err.message);
+          updateJobStatus(jobId, JOB_STATUS.FAILED, {
+            error: err.message,
+            progress: { stage: 'failed', percentage: 0, message: `Analysis failed: ${err.message}` },
+          });
+        });
+      } else {
+        updateJobStatus(jobId, JOB_STATUS.RUNNING, {
+          progress: { stage: 'starting', percentage: 5, message: 'Starting analysis...' },
+        });
+        processJob(jobId).catch(err => {
+          console.error(`❌ Job ${jobId.slice(0, 8)} failed:`, err.message);
+          updateJobStatus(jobId, JOB_STATUS.FAILED, {
+            error: err.message,
+            progress: { stage: 'failed', percentage: 0, message: `Analysis failed: ${err.message}` },
+          });
+        });
+      }
     });
 
     res.json({ success: true, jobId, status: JOB_STATUS.PENDING });
@@ -694,8 +710,30 @@ async function runAnalysisPhase(jobId) {
   if (!job) throw new Error('Job not found');
 
   const { analysisData } = job;
-  const screenshots = job.captureResults?.screenshots || analysisData.screenshots || [];
+  // Prefer screenshots passed explicitly in analysisData (which reflect user edits at the review step)
+  // over the stale captureResults cache from the capture phase.
+  const screenshots = analysisData.screenshots?.length
+    ? analysisData.screenshots
+    : job.captureResults?.screenshots || [];
   const desktopDir = path.join(__dirname, 'data', `job_${jobId}`, 'desktop');
+
+  // Reconcile disk with the user-edited screenshots list:
+  // delete any image files on disk that are NOT in the current screenshots array.
+  const keptFilenames = new Set(
+    screenshots
+      .map(s => s.data?.filename)
+      .filter(Boolean)
+  );
+  try {
+    const diskFiles = await fs.readdir(desktopDir);
+    for (const file of diskFiles) {
+      if (!/\.(png|jpg|jpeg)$/i.test(file)) continue;
+      if (!keptFilenames.has(file)) {
+        await fs.remove(path.join(desktopDir, file));
+        console.log(`🗑️  Removed stale screenshot from disk: ${file}`);
+      }
+    }
+  } catch (_) {}
 
   // For any remote storageUrls not yet on disk, download them
   let existingCount = 0;
@@ -735,12 +773,23 @@ async function runAnalysisPhase(jobId) {
     customIndex++;
   }
 
-  // Derive URLs
-  const urls = [...new Set(screenshots.map(s => s.url).filter(u => u?.startsWith('http')))];
-  if (!urls.length) urls.push(analysisData.websiteUrl);
+  // Write url-map.json so the analyzer can map custom filenames to their page URLs
+  const urlMap = {};
+  for (const s of screenshots) {
+    if (s.data?.filename) {
+      urlMap[s.data.filename] = s.url;
+    }
+  }
+  if (Object.keys(urlMap).length > 0) {
+    await fs.ensureDir(desktopDir);
+    await fs.writeJson(path.join(desktopDir, 'url-map.json'), urlMap);
+  }
+
+  // Only pass real HTTP URLs for Lighthouse — custom pages (e.g. "Map View") are skipped
+  const httpUrls = [...new Set(screenshots.map(s => s.url).filter(u => u?.startsWith('http')))];
 
   const analysisInput = {
-    urls,
+    urls: httpUrls.length ? httpUrls : undefined,
     organizationName: analysisData.organizationName,
     organizationType: 'organization',
     organizationPurpose: analysisData.primaryGoal || analysisData.sitePurpose,
@@ -767,10 +816,11 @@ async function runAnalysisPhase(jobId) {
   const result = await analysis(analysisInput, onProgress);
   if (!result.success) throw new Error(result.error || 'Analysis failed');
 
+  const pageCount = [...new Set(screenshots.map(s => s.url))].length;
   updateJobStatus(jobId, JOB_STATUS.COMPLETED, {
     results: {
       captureJobId: jobId,
-      urls,
+      urls: httpUrls,
       screenshots,
       reportData: result.reportData,
       lighthouse: result.lighthouse,
@@ -778,7 +828,7 @@ async function runAnalysisPhase(jobId) {
       formatting: result.formatting,
       htmlReport: result.htmlReport,
     },
-    progress: { stage: 'completed', percentage: 100, message: `Analysis complete for ${urls.length} page${urls.length === 1 ? '' : 's'}` },
+    progress: { stage: 'completed', percentage: 100, message: `Analysis complete for ${pageCount} page${pageCount === 1 ? '' : 's'}` },
   });
 
   console.log(`✅ Analysis phase complete for job ${jobId.slice(0, 8)}`);

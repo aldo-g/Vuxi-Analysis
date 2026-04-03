@@ -96,8 +96,8 @@ class ReportGenerator {
       }
 
       const files = await fs.readdir(sourceDir);
-      const screenshotFiles = files.filter(file => file.toLowerCase().endsWith('.png'));
-      
+      const screenshotFiles = files.filter(file => /\.(png|jpg|jpeg|webp)$/i.test(file));
+
       if (screenshotFiles.length === 0) {
         console.log(`    ⚠️  No screenshot files found in: ${sourceDir}`);
         return {};
@@ -108,7 +108,9 @@ class ReportGenerator {
         const filePath = path.join(sourceDir, file);
         const buffer = await fs.readFile(filePath);
         const base64 = buffer.toString('base64');
-        screenshotData[file] = `data:image/png;base64,${base64}`;
+        const ext = path.extname(file).toLowerCase().replace('.', '');
+        const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png';
+        screenshotData[file] = `data:${mime};base64,${base64}`;
       }
       
       console.log(`    ✅ ${screenshotFiles.length} screenshots encoded to base64`);
@@ -144,15 +146,28 @@ class ReportGenerator {
     } else if (fs.existsSync(this.screenshotsSourceDir)) {
       filesInSourceDir = fs.readdirSync(this.screenshotsSourceDir);
     }
-    
-    const pngFiles = filesInSourceDir.filter(f => f.endsWith('.png')).sort();
 
+    const pngFiles = filesInSourceDir.filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f)).sort();
+
+    // Use url-map.json to find the first screenshot that belongs to this page URL
+    const urlMapPath = path.join(sourceBaseDir || this.screenshotsSourceDir, 'url-map.json');
+    if (fs.existsSync(urlMapPath)) {
+      try {
+        const urlMap = JSON.parse(fs.readFileSync(urlMapPath, 'utf8'));
+        // Normalize URL for comparison (strip trailing slash)
+        const normalizeUrl = (u) => { try { const p = new URL(u); if (p.pathname === '/') p.pathname = ''; return p.href.replace(/\/$/, ''); } catch { return u?.replace(/\/$/, '') || u; } };
+        const normalizedPageUrl = normalizeUrl(url);
+        const match = pngFiles.find(f => normalizeUrl(urlMap[f]) === normalizedPageUrl);
+        if (match) return match;
+      } catch (_) {}
+    }
+
+    // Fallback: nth file by index
     if (pngFiles[index]) {
       return pngFiles[index];
     }
 
-    const generatedName = this.generateScreenshotFilenameFromUrl(url, index);
-    return generatedName;
+    return this.generateScreenshotFilenameFromUrl(url, index);
   }
 
   generateScreenshotFilenameFromUrl(url, index) {
