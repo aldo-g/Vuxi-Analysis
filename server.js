@@ -30,6 +30,24 @@ const supabase = createClient(
 // ─── Job state ────────────────────────────────────────────────────────────────
 
 const jobs = new Map();
+const MAX_CONCURRENT_JOBS = 1;
+
+function activeJobCount() {
+  const activeStatuses = new Set([
+    JOB_STATUS.RUNNING,
+    JOB_STATUS.URL_DISCOVERY,
+    JOB_STATUS.SCREENSHOT_CAPTURE,
+    JOB_STATUS.LIGHTHOUSE,
+    JOB_STATUS.LLM_ANALYSIS,
+    JOB_STATUS.FORMATTING,
+    JOB_STATUS.REPORT_GENERATION,
+  ]);
+  let count = 0;
+  for (const job of jobs.values()) {
+    if (activeStatuses.has(job.status)) count++;
+  }
+  return count;
+}
 
 // Unified status covering both capture and analysis phases
 const JOB_STATUS = {
@@ -378,6 +396,9 @@ app.post('/api/pipeline', async (req, res) => {
     if (!process.env.ANTHROPIC_API_KEY) {
       return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
     }
+    if (activeJobCount() >= MAX_CONCURRENT_JOBS) {
+      return res.status(429).json({ error: 'Server is busy. Please try again in a few minutes.' });
+    }
 
     const jobId = uuidv4();
     const job = {
@@ -442,6 +463,9 @@ app.get('/api/pipeline/:jobId', async (req, res) => {
 app.post('/api/capture', async (req, res) => {
   const { baseUrl, options = {} } = req.body || {};
   if (!baseUrl) return res.status(400).json({ error: 'baseUrl is required' });
+  if (activeJobCount() >= MAX_CONCURRENT_JOBS) {
+    return res.status(429).json({ error: 'Server is busy. Please try again in a few minutes.' });
+  }
 
   // Capture-only mode: run URL discovery + screenshots, stop before analysis.
   // The frontend polls for status=completed then calls /api/analysis separately.
@@ -502,6 +526,9 @@ app.post('/api/analysis', async (req, res) => {
 
     if (!analysisData || !captureJobId) {
       return res.status(400).json({ error: 'Missing required fields: analysisData and captureJobId' });
+    }
+    if (activeJobCount() >= MAX_CONCURRENT_JOBS) {
+      return res.status(429).json({ error: 'Server is busy. Please try again in a few minutes.' });
     }
     if (!process.env.ANTHROPIC_API_KEY) {
       return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
